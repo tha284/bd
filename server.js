@@ -13,8 +13,8 @@ app.use(express.json());
 // =========================================================================
 const db = mysql.createConnection({
     host: 'localhost',
-    user: 'seu_usuario', // <<-- SUBSTITUA AQUI
-    password: 'sua_senha', // <<-- SUBSTITUA AQUI
+    user: 'root', // <<-- SUBSTITUA AQUI
+    password: '', // <<-- SUBSTITUA AQUI
     database: 'MindCareApp'
 });
 
@@ -74,6 +74,44 @@ app.post('/login', (req, res) => {
 
 
 // =========================================================================
+// ROTA PARA SALVAR ENTRADAS DE DIÁRIO
+// =========================================================================
+app.post('/diary/save', (req, res) => {
+    const { userId, mood, entryText, imageUrl } = req.body;
+
+    if (!userId || !mood || !entryText) {
+        return res.status(400).json({ message: 'Dados incompletos para salvar a anotação.' });
+    }
+
+    const sql = 'INSERT INTO diary_entries (user_id, mood, entry_text, image_url) VALUES (?, ?, ?, ?)';
+    db.query(sql, [userId, mood, entryText, imageUrl], (err, result) => {
+        if (err) {
+            console.error('Erro ao salvar anotação:', err);
+            return res.status(500).json({ message: 'Erro interno ao salvar anotação.' });
+        }
+        res.status(201).json({ message: 'Anotação salva com sucesso!', entryId: result.insertId });
+    });
+});
+
+// =========================================================================
+// ROTA PARA BUSCAR ENTRADAS DE DIÁRIO
+// =========================================================================
+app.get('/diary/getEntries/:userId', (req, res) => {
+    const { userId } = req.params;
+
+    const sql = `SELECT id, entry_text, mood, image_url, created_at FROM diary_entries WHERE user_id = ? ORDER BY created_at DESC`;
+
+    db.query(sql, [userId], (err, results) => {
+        if (err) {
+            console.error('Erro ao buscar anotações:', err);
+            return res.status(500).json({ message: 'Erro interno ao buscar anotações.' });
+        }
+        res.status(200).json(results);
+    });
+});
+
+
+// =========================================================================
 // ROTA PARA SALVAR ENTRADA DE HUMOR
 // =========================================================================
 app.post('/mood/save', (req, res) => {
@@ -113,6 +151,73 @@ app.get('/mood/getReport/:userId', (req, res) => {
             return res.status(500).json({ message: 'Erro interno ao buscar resumo de humor.' });
         }
         res.status(200).json(results);
+    });
+});
+
+// =========================================================================
+// ROTA PARA BUSCAR DADOS DO USUÁRIO (NOVA ROTA)
+// =========================================================================
+app.get('/user/:userId', (req, res) => {
+    const { userId } = req.params;
+
+    const sql = 'SELECT username, email, emergency_phone FROM users WHERE id = ?';
+    db.query(sql, [userId], (err, results) => {
+        if (err) {
+            console.error('Erro ao buscar dados do usuário:', err);
+            return res.status(500).json({ message: 'Erro interno ao buscar dados.' });
+        }
+        if (results.length > 0) {
+            res.status(200).json(results[0]);
+        } else {
+            res.status(404).json({ message: 'Usuário não encontrado.' });
+        }
+    });
+});
+
+
+// =========================================================================
+// ROTA PARA ATUALIZAR DADOS DO USUÁRIO (NOVA ROTA)
+// =========================================================================
+app.put('/user/update/:userId', (req, res) => {
+    const { userId } = req.params;
+    const { username, email, password_hash, emergency_phone } = req.body;
+
+    const updates = [];
+    const values = [];
+
+    if (username !== undefined) {
+        updates.push('username = ?');
+        values.push(username);
+    }
+    if (email !== undefined) {
+        updates.push('email = ?');
+        values.push(email);
+    }
+    if (password_hash !== undefined && password_hash !== '') {
+        updates.push('password_hash = ?');
+        values.push(password_hash);
+    }
+    if (emergency_phone !== undefined) {
+        updates.push('emergency_phone = ?');
+        values.push(emergency_phone);
+    }
+
+    if (updates.length === 0) {
+        return res.status(400).json({ message: 'Nenhum dado para atualizar.' });
+    }
+
+    const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(userId);
+
+    db.query(sql, values, (err, result) => {
+        if (err) {
+            console.error('Erro ao atualizar dados do usuário:', err);
+            return res.status(500).json({ message: 'Erro interno ao atualizar dados.' });
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Usuário não encontrado.' });
+        }
+        res.status(200).json({ message: 'Dados atualizados com sucesso.' });
     });
 });
 
